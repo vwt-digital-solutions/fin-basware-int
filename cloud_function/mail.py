@@ -1,19 +1,14 @@
 import io
-import base64
 import logging
-import google.auth
-import googleapiclient.discovery
 
 from typing import List, Optional
 from dataclasses import dataclass
 
 from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials
 from google.cloud import storage
-from google.auth import iam
-from google.auth.transport import requests
-from google.oauth2 import service_account
 
 from PyPDF2 import PdfFileMerger, PdfFileReader
+
 
 @dataclass
 class Attachment:
@@ -54,7 +49,7 @@ class MailProcessor:
         credentials = Credentials(config.email_account, config.password)
         self._account = Account(config.email_account, credentials=credentials, autodiscover=True)
 
-    def _send_email(self, account, subject, body, recipients, attachments: [Attachment]= None):
+    def _send_email(self, account, subject, body, recipients, attachments: [Attachment] = None):
         """
         Send an email.
 
@@ -95,8 +90,7 @@ class MailProcessor:
         """
         self._get_attachments()
         recipient = self._config.mail_to_mapping.get(self._email.recipient)
-        self._send_email(self._account, self._email.subject, self._email.body, [recipient] , self._email.attachments)
-        
+        self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
 
     def _get_attachments(self):
         """
@@ -120,20 +114,6 @@ class MailProcessor:
             first_attachment = next(iter(self._email.attachments))
             attachment_name = first_attachment.file_name
             self._merge_pdfs(attachment_name)
-
-        # attachments = []
-        #
-        # for attachment in self._email.attachments:
-        #     main_type, sub_type = attachment.mimetype.split('/', 1)
-        #     file = MIMEBase(main_type, sub_type)
-        #     file.set_payload(attachment.content)
-        #     file.add_header('Content-Disposition',
-        #                     'attachment',
-        #                     filename=attachment.file_name)
-        #     encoders.encode_base64(file)
-        #     attachments.append(file)
-        #
-        # return attachments
 
     def _merge_pdfs(self, attachment_name: str):
         """
@@ -175,42 +155,3 @@ class MailProcessor:
         content = blob.download_as_bytes()
 
         return content
-
-    def _mail_service(self):
-        """
-        Creates a gmail service.
-        """
-
-        credentials, project_id = google.auth.default(
-            scopes=['https://www.googleapis.com/auth/iam'])
-
-        delegated_credentials = self._delegated_credentials(credentials)
-
-        service = googleapiclient.discovery.build(
-            'gmail', 'v1',
-            credentials=delegated_credentials,
-            cache_discovery=False)
-
-        return service
-
-    def _delegated_credentials(self, credentials):
-        """
-        Creates delegated credentials.
-        """
-
-        request = requests.Request()
-        credentials.refresh(request)
-
-        signer = iam.Signer(
-            request,
-            credentials,
-            self._config.service_account_email)
-
-        credentials = service_account.Credentials(
-            signer=signer,
-            service_account_email=self._config.service_account_email,
-            token_uri='https://accounts.google.com/o/oauth2/token',
-            scopes=self._config.scopes,
-            subject=self._config.subject_address)
-
-        return credentials
