@@ -7,18 +7,13 @@ import googleapiclient.discovery
 from typing import List, Optional
 from dataclasses import dataclass
 
+from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials
 from google.cloud import storage
 from google.auth import iam
 from google.auth.transport import requests
 from google.oauth2 import service_account
 
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
 from PyPDF2 import PdfFileMerger, PdfFileReader
-
 
 @dataclass
 class Attachment:
@@ -41,60 +36,68 @@ class Email:
 
 
 @dataclass
-class GmailConfig:
-    service_account_email: str
-    subject_address: str
-    scopes: str
-    mail_to: str
+class EWSConfig:
+    email_account: str
+    password: str
     mail_from: str
-    mail_reply_to: str
+    mail_to_mapping: str
     pdf_only: bool
     merge_pdfs: bool
 
 
 class MailProcessor:
 
-    def __init__(self, email: Email, config: GmailConfig):
+    def __init__(self, email: Email, config: EWSConfig):
         self._email = email
         self._config = config
         self._gcs_client = storage.Client()
+        credentials = Credentials(config.email_account, config.password)
+        self._account = Account(config.email_account, credentials=credentials, autodiscover=True)
+
+    def _send_email(self, account, subject, body, recipients, attachments: [Attachment]= None):
+        """
+        Send an email.
+
+        Parameters
+        ----------
+        account : Account object
+        subject : str
+        body : str
+        recipients : list of str
+            Each str is and email adress
+        attachments : list of tuples or None
+            (filename, binary contents)
+
+        Examples
+        --------
+        >>> send_email(account, 'Subject line', 'Hello!', ['info@example.com'])
+        """
+        to_recipients = []
+        for recipient in recipients:
+            to_recipients.append(Mailbox(email_address=recipient))
+        # Create message
+        m = Message(account=account,
+                    folder=account.sent,
+                    subject=subject,
+                    body=body,
+                    to_recipients=to_recipients)
+
+        # attach files
+        for attachment in attachments or []:
+            file = FileAttachment(name=attachment.file_name, content=attachment.content)
+            m.attach(file)
+        logging.info('Sending mail to {}'.format(to_recipients))
+        m.send_and_save()
 
     def send(self):
         """
         Sends an e-mail as "me" using the mail service and message body.
         """
+        self._get_attachments()
+        recipient = self._config.mail_to_mapping.get(self._email.recipient)
+        self._send_email(self._account, self._email.subject, self._email.body, [recipient] , self._email.attachments)
 
-        body = self._generate_body()
-
-        message = (self._mail_service().users().messages().send(
-            userId="me",
-            body=body).execute())
-
-        logging.info(f"Sent message with id {message['id']}")
-
-    def _generate_body(self):
-        """
-        Generates an e-mail body.
-        """
-
-        message = MIMEMultipart()
-        message['to'] = self._config.mail_to
-        message['from'] = self._config.mail_from
-        message['subject'] = self._email.subject
-        message['reply-to'] = self._config.mail_reply_to
-
-        text = MIMEText(self._email.body, 'plain')
-        message.attach(text)
-
-        attachments = self._get_attachments()
-
-        for attachment in attachments:
-            message.attach(attachment)
-
-        raw = base64.urlsafe_b64encode(
-            message.as_bytes()).decode()
-
-        return {'raw': raw}
+        logging.info(f"Sent message with id {self._email.uuid}")
 
     def _get_attachments(self):
         """
@@ -119,19 +122,19 @@ class MailProcessor:
             attachment_name = first_attachment.file_name
             self._merge_pdfs(attachment_name)
 
-        attachments = []
-
-        for attachment in self._email.attachments:
-            main_type, sub_type = attachment.mimetype.split('/', 1)
-            file = MIMEBase(main_type, sub_type)
-            file.set_payload(attachment.content)
-            file.add_header('Content-Disposition',
-                            'attachment',
-                            filename=attachment.file_name)
-            encoders.encode_base64(file)
-            attachments.append(file)
-
-        return attachments
+        # attachments = []
+        #
+        # for attachment in self._email.attachments:
+        #     main_type, sub_type = attachment.mimetype.split('/', 1)
+        #     file = MIMEBase(main_type, sub_type)
+        #     file.set_payload(attachment.content)
+        #     file.add_header('Content-Disposition',
+        #                     'attachment',
+        #                     filename=attachment.file_name)
+        #     encoders.encode_base64(file)
+        #     attachments.append(file)
+        #
+        # return attachments
 
     def _merge_pdfs(self, attachment_name: str):
         """
