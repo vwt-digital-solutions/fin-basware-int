@@ -96,8 +96,7 @@ class MailProcessor:
         self._get_attachments()
         recipient = self._config.mail_to_mapping.get(self._email.recipient)
         self._send_email(self._account, self._email.subject, self._email.body, [recipient] , self._email.attachments)
-
-        logging.info(f"Sent message with id {self._email.uuid}")
+        
 
     def _get_attachments(self):
         """
