@@ -124,10 +124,10 @@ class MailProcessor:
 
         self._email.attachments = [a for a in attachments if not a.mimetype.endswith("pdf")]
 
-        merger = PdfFileMerger()
+        merger = PdfFileMerger(strict=False)
         for attachment in attachments:
             with io.BytesIO(attachment.content) as file:
-                merger.append(PdfFileReader(file))
+                merger.append(PdfFileReader(file, strict=False), import_bookmarks=False)
 
         logging.info(f"Merged {len(attachments)} pdf attachments")
 
