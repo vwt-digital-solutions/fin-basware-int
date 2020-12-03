@@ -1,5 +1,7 @@
 import json
 import base64
+import os
+
 import config
 import util
 import logging
@@ -28,7 +30,7 @@ def handler(request):
 
     configuration = EWSConfig(
         email_account=config.EMAIL_ADDRESS,
-        password=util.get_secret(config.PROJECT_ID, config.SECRET_ID),
+        password=util.get_secret(os.environ['PROJECT_ID'], config.SECRET_ID),
         mail_from=config.EMAIL_ADDRESS,
         mail_to_mapping=config.EMAILS_SENDER_RECEIVER_MAPPING,
         pdf_only=config.PDF_ONLY,
