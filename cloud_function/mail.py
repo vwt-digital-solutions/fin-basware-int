@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional
 from dataclasses import dataclass
 
-from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials
+from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance
 from google.cloud import storage
 
 from PyPDF2 import PdfFileMerger, PdfFileReader
@@ -25,8 +25,8 @@ class Email:
     received_on: str
     sender: str
     recipient: str
-    subject: str
-    body: str
+    subject: str or None
+    body: str or None
     attachments: List[Attachment]
 
 
@@ -47,7 +47,8 @@ class MailProcessor:
         self._config = config
         self._gcs_client = storage.Client()
         credentials = Credentials(config.email_account, config.password)
-        self._account = Account(config.email_account, credentials=credentials, autodiscover=True)
+        ews_config = Configuration(auth_type='basic', retry_policy=FaultTolerance(max_wait=300))
+        self._account = Account(config.email_account, credentials=credentials, autodiscover=True, config=ews_config)
 
     def _send_email(self, account, subject, body, recipients, attachments: [Attachment] = None):
         """
@@ -124,10 +125,10 @@ class MailProcessor:
 
         self._email.attachments = [a for a in attachments if not a.mimetype.endswith("pdf")]
 
-        merger = PdfFileMerger()
+        merger = PdfFileMerger(strict=False)
         for attachment in attachments:
             with io.BytesIO(attachment.content) as file:
-                merger.append(PdfFileReader(file))
+                merger.append(PdfFileReader(file, strict=False), import_bookmarks=False)
 
         logging.info(f"Merged {len(attachments)} pdf attachments")
 

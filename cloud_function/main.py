@@ -26,6 +26,11 @@ def handler(request):
         logging.exception('Failed while extracting message!')
         raise e
 
+    if message['email'].get('subject', None) is None:
+        message['email']['subject'] = ''
+    if message['email'].get('body', None) is None:
+        message['email']['body'] = ''
+
     email = from_dict(data_class=Email, data=message['email'])
 
     configuration = EWSConfig(
