@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance
 from google.cloud import storage
 
-from PyPDF2 import PdfFileMerger, PdfFileReader
+from pikepdf import Pdf
 
 
 @dataclass
@@ -125,23 +125,29 @@ class MailProcessor:
 
         self._email.attachments = [a for a in attachments if not a.mimetype.endswith("pdf")]
 
-        merger = PdfFileMerger(strict=False)
+        merged_pdf = Pdf.new()
+
+        version = merged_pdf.pdf_version
+
         for attachment in attachments:
             with io.BytesIO(attachment.content) as file:
-                merger.append(PdfFileReader(file, strict=False), import_bookmarks=False)
+                src_pdf = Pdf.open(file)
+                version = max(version, src_pdf.pdf_version)
+                merged_pdf.pages.extend(src_pdf.pages)
 
-        logging.info(f"Merged {len(attachments)} pdf attachments")
+        merged_pdf.remove_unreferenced_resources()
 
-        content = io.BytesIO()
-        merger.write(content)
-        merger.close()
+        output = io.BytesIO()
+        merged_pdf.save(output)
+        output.seek(0)
+        merged_pdf = output.read()
 
         pdf = Attachment(
             mimetype='application/pdf',
             bucket=None,
             file_name=attachment_name,
             full_path=None,
-            content=content.getvalue()
+            content=merged_pdf
         )
 
         self._email.attachments = [pdf] + self._email.attachments
