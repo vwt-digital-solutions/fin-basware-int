@@ -1,9 +1,11 @@
 import io
 import logging
+import tempfile
 
 from typing import List, Optional
 from dataclasses import dataclass
 
+from PyPDF2 import PdfFileWriter, PdfFileReader
 from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance
 from google.cloud import storage
 
@@ -119,14 +121,17 @@ class MailProcessor:
     def _merge_pdfs(self, attachment_name: str):
         """
         Merges pdf attachments to a single file.
+        This function uses both pikePDF (For merging), and pyPDF2 (for cleaning).
+        An initial implementation used only pyPDF2, but that proved to problematic since pyPDF
+        has quite a lot of trouble merging different types of PDFs. Since pikePDF doesn't feature sanitizing pdfs,
+        we run it through pikepdf afterwards.
         """
 
         attachments = self._email.attachments
-
         self._email.attachments = [a for a in attachments if not a.mimetype.endswith("pdf")]
 
+        # Go through all attachments and merge them using pikePDF
         merged_pdf = Pdf.new()
-
         version = merged_pdf.pdf_version
 
         for attachment in attachments:
@@ -137,17 +142,25 @@ class MailProcessor:
 
         merged_pdf.remove_unreferenced_resources()
 
-        output = io.BytesIO()
-        merged_pdf.save(output)
-        output.seek(0)
-        merged_pdf = output.read()
+        merged_pdf_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
+        merged_pdf.save(merged_pdf_file)
+
+        # Use PyPDF2 to clean the pdf from any links and Javascript.
+        writer = PdfFileWriter()
+        reader = PdfFileReader(merged_pdf_file, strict=False)
+        [writer.addPage(reader.getPage(i)) for i in range(0, reader.getNumPages())]
+        writer.removeLinks()
+        with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as merged_and_cleaned_pdf_file:
+            writer.write(merged_and_cleaned_pdf_file)
+            merged_and_cleaned_pdf_file.seek(0)
+            merged_and_cleaned_pdf_content = merged_and_cleaned_pdf_file.read()
 
         pdf = Attachment(
             mimetype='application/pdf',
             bucket=None,
             file_name=attachment_name,
             full_path=None,
-            content=merged_pdf
+            content=merged_and_cleaned_pdf_content
         )
 
         self._email.attachments = [pdf] + self._email.attachments
