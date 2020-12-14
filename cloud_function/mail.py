@@ -5,11 +5,16 @@ import tempfile
 from typing import List, Optional
 from dataclasses import dataclass
 
-from PyPDF2 import PdfFileWriter, PdfFileReader
-from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance
+
+from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance, HTMLBody
 from google.cloud import storage
 
+from jinja2 import Template
+
+from PyPDF2 import PdfFileWriter, PdfFileReader
 from pikepdf import Pdf
+
+from cloud_function import config
 
 
 @dataclass
@@ -52,59 +57,36 @@ class MailProcessor:
         ews_config = Configuration(auth_type='basic', retry_policy=FaultTolerance(max_wait=300))
         self._account = Account(config.email_account, credentials=credentials, autodiscover=True, config=ews_config)
 
-    def _send_email(self, account, subject, body, recipients, attachments: [Attachment] = None):
-        """
-        Send an email.
-
-        Parameters
-        ----------
-        account : Account object
-        subject : str
-        body : str
-        recipients : list of str
-            Each str is and email adress
-        attachments : list of tuples or None
-            (filename, binary contents)
-
-        Examples
-        --------
-        >>> send_email(account, 'Subject line', 'Hello!', ['info@example.com'])
-        """
-        to_recipients = []
-        for recipient in recipients:
-            to_recipients.append(Mailbox(email_address=recipient))
-        # Create message
-        m = Message(account=account,
-                    folder=account.sent,
-                    subject=subject,
-                    body=body,
-                    to_recipients=to_recipients)
-
-        # attach files
-        for attachment in attachments or []:
-            file = FileAttachment(name=attachment.file_name, content=attachment.content)
-            m.attach(file)
-        logging.info('Sending mail to {}'.format(to_recipients))
-        m.send_and_save()
-
-    def send(self):
+    def process(self):
         """
         Sends an e-mail as "me" using the mail service and message body.
         """
-        self._get_attachments()
-        recipient = self._config.mail_to_mapping.get(self._email.recipient)
-        self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
+        pdf_count = self._load_attachments()
 
-    def _get_attachments(self):
+        if not pdf_count == 0:
+            recipient = self._config.mail_to_mapping.get(self._email.recipient)
+            self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
+
+        if config.SEND_REPLIES:
+            if pdf_count == 0:
+                self._send_reply_email('templates/error.html')
+            if pdf_count == 1:
+                pass
+            else:
+                pass
+
+    def _load_attachments(self):
         """
         Downloads attachments from a gcs bucket.
         Filters and merges pdf attachments if applicable.
+        Returns the number of pdf's in the email.
         """
 
+        pdf_list = [a for a in self._email.attachments if a.mimetype.endswith('pdf')]
+        pdf_count = len(pdf_list)
+
         if self._config.pdf_only:
-            for idx, attachment in enumerate(self._email.attachments):
-                if not attachment.mimetype.endswith("pdf"):
-                    self._email.attachments.pop(idx)
+            self._email.attachments = pdf_list
 
         for attachment in self._email.attachments:
             attachment.content = self._read_gcs(
@@ -117,6 +99,8 @@ class MailProcessor:
             first_attachment = next(iter(self._email.attachments))
             attachment_name = first_attachment.file_name
             self._merge_pdfs(attachment_name)
+
+        return pdf_count
 
     def _merge_pdfs(self, attachment_name: str):
         """
@@ -175,3 +159,62 @@ class MailProcessor:
         content = blob.download_as_bytes()
 
         return content
+
+    def _send_email(self, account, subject, body, recipients,
+                    attachments: [Attachment] = None, reply_to: [str] = [], sender: str = None):
+        """
+        Send an email.
+
+        Parameters
+        ----------
+        account : Account object
+        subject : str
+        body : str
+        recipients : list of str
+            Each str is and email adress
+        attachments : list of tuples or None
+            (filename, binary contents)
+
+        Examples
+        --------
+        >>> send_email(account, 'Subject line', 'Hello!', ['info@example.com'])
+        """
+        to_recipients = []
+        for recipient in recipients:
+            to_recipients.append(Mailbox(email_address=recipient))
+
+        reply_to_addresses = []
+        for sender in reply_to:
+            reply_to_addresses.append(Mailbox(email_address=sender))
+
+        if sender is None:
+            # Create message
+            m = Message(account=account,
+                        folder=account.sent,
+                        subject=subject,
+                        body=HTMLBody(body),
+                        to_recipients=to_recipients,
+                        reply_to=reply_to_addresses)
+        else:
+            m = Message(account=account,
+                        folder=account.sent,
+                        subject=subject,
+                        body=HTMLBody(body),
+                        to_recipients=to_recipients,
+                        reply_to=reply_to_addresses,
+                        sender=sender)
+
+        # attach files
+        for attachment in attachments or []:
+            file = FileAttachment(name=attachment.file_name, content=attachment.content)
+            m.attach(file)
+        logging.info('Sending mail to {}'.format(to_recipients))
+        m.send_and_save()
+
+    def _send_reply_email(self, template: str):
+        with open(template) as file_:
+            template = Template(file_.read())
+        body = template.render(email=self._email)
+        subject = 'Re: {}'.format(self._email.subject)
+
+        self._send_email(self._account, subject, body, [self._email.sender], [], ['no_reply@vwtelecom.com'])

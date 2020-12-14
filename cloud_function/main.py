@@ -44,7 +44,7 @@ def handler(request):
 
     processor = MailProcessor(email, configuration)
 
-    processor.send()
+    processor.process()
 
 
 if __name__ == '__main__':
