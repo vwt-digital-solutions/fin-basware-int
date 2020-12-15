@@ -1,10 +1,10 @@
 import io
 import logging
 import tempfile
+import config
 
 from typing import List, Optional
 from dataclasses import dataclass
-
 
 from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance, HTMLBody
 from google.cloud import storage
@@ -13,8 +13,6 @@ from jinja2 import Template
 
 from PyPDF2 import PdfFileWriter, PdfFileReader
 from pikepdf import Pdf
-
-from cloud_function import config
 
 
 @dataclass
