@@ -71,7 +71,7 @@ class MailProcessor:
             if pdf_count == 0:
                 self._send_reply_email('templates/error.html')
             if pdf_count == 1:
-                pass
+                self._send_reply_email('templates/success.html')
             else:
                 pass
 
