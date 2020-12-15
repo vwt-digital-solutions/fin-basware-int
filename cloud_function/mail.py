@@ -73,7 +73,7 @@ class MailProcessor:
             if pdf_count == 1:
                 self._send_reply_email('templates/success.html')
             else:
-                pass
+                self._send_reply_email('templates/warning.html')
 
     def _load_attachments(self):
         """
