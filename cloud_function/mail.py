@@ -1,13 +1,18 @@
 import io
 import logging
+import tempfile
+import config
 
 from typing import List, Optional
 from dataclasses import dataclass
 
-from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance
+from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance, HTMLBody
 from google.cloud import storage
 
-from PyPDF2 import PdfFileMerger, PdfFileReader
+from jinja2 import Template
+
+from PyPDF2 import PdfFileWriter, PdfFileReader
+from pikepdf import Pdf
 
 
 @dataclass
@@ -50,7 +55,111 @@ class MailProcessor:
         ews_config = Configuration(auth_type='basic', retry_policy=FaultTolerance(max_wait=300))
         self._account = Account(config.email_account, credentials=credentials, autodiscover=True, config=ews_config)
 
-    def _send_email(self, account, subject, body, recipients, attachments: [Attachment] = None):
+    def process(self):
+        """
+        Sends an e-mail as "me" using the mail service and message body.
+        """
+        pdf_count = self._load_attachments()
+
+        if not pdf_count == 0:
+            recipient = self._config.mail_to_mapping.get(self._email.recipient)
+            self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
+
+        if config.SEND_REPLIES:
+            if pdf_count == 0:
+                self._send_reply_email('templates/error.html')
+            if pdf_count == 1:
+                self._send_reply_email('templates/success.html')
+            else:
+                self._send_reply_email('templates/warning.html')
+
+    def _load_attachments(self):
+        """
+        Downloads attachments from a gcs bucket.
+        Filters and merges pdf attachments if applicable.
+        Returns the number of pdf's in the email.
+        """
+
+        pdf_list = [a for a in self._email.attachments if a.mimetype.endswith('pdf')]
+        pdf_count = len(pdf_list)
+
+        if self._config.pdf_only:
+            self._email.attachments = pdf_list
+
+        for attachment in self._email.attachments:
+            attachment.content = self._read_gcs(
+                attachment.bucket,
+                attachment.full_path)
+
+            logging.info(f"Downloaded attachment {attachment.file_name}")
+
+        if self._email.attachments and self._config.merge_pdfs:
+            first_attachment = next(iter(self._email.attachments))
+            attachment_name = first_attachment.file_name
+            self._merge_pdfs(attachment_name)
+
+        return pdf_count
+
+    def _merge_pdfs(self, attachment_name: str):
+        """
+        Merges pdf attachments to a single file.
+        This function uses both pikePDF (For merging), and pyPDF2 (for cleaning).
+        An initial implementation used only pyPDF2, but that proved to problematic since pyPDF
+        has quite a lot of trouble merging different types of PDFs. Since pikePDF doesn't feature sanitizing pdfs,
+        we run it through pikepdf afterwards.
+        """
+
+        attachments = self._email.attachments
+        self._email.attachments = [a for a in attachments if not a.mimetype.endswith("pdf")]
+
+        # Go through all attachments and merge them using pikePDF
+        merged_pdf = Pdf.new()
+        version = merged_pdf.pdf_version
+
+        for attachment in attachments:
+            with io.BytesIO(attachment.content) as file:
+                src_pdf = Pdf.open(file)
+                version = max(version, src_pdf.pdf_version)
+                merged_pdf.pages.extend(src_pdf.pages)
+
+        merged_pdf.remove_unreferenced_resources()
+
+        merged_pdf_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
+        merged_pdf.save(merged_pdf_file)
+
+        # Use PyPDF2 to clean the pdf from any links and Javascript.
+        writer = PdfFileWriter()
+        reader = PdfFileReader(merged_pdf_file, strict=False)
+        [writer.addPage(reader.getPage(i)) for i in range(0, reader.getNumPages())]
+        writer.removeLinks()
+        with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as merged_and_cleaned_pdf_file:
+            writer.write(merged_and_cleaned_pdf_file)
+            merged_and_cleaned_pdf_file.seek(0)
+            merged_and_cleaned_pdf_content = merged_and_cleaned_pdf_file.read()
+
+        pdf = Attachment(
+            mimetype='application/pdf',
+            bucket=None,
+            file_name=attachment_name,
+            full_path=None,
+            content=merged_and_cleaned_pdf_content
+        )
+
+        self._email.attachments = [pdf] + self._email.attachments
+
+    def _read_gcs(self, bucket_name: str, file_name: str):
+        """
+        Reads a file from google cloud storage.
+        """
+
+        bucket = self._gcs_client.get_bucket(bucket_name)
+        blob = bucket.get_blob(file_name)
+        content = blob.download_as_bytes()
+
+        return content
+
+    def _send_email(self, account, subject, body, recipients,
+                    attachments: [Attachment] = None, reply_to: [str] = [], sender: str = None):
         """
         Send an email.
 
@@ -71,12 +180,27 @@ class MailProcessor:
         to_recipients = []
         for recipient in recipients:
             to_recipients.append(Mailbox(email_address=recipient))
-        # Create message
-        m = Message(account=account,
-                    folder=account.sent,
-                    subject=subject,
-                    body=body,
-                    to_recipients=to_recipients)
+
+        reply_to_addresses = []
+        for sender in reply_to:
+            reply_to_addresses.append(Mailbox(email_address=sender))
+
+        if sender is None:
+            # Create message
+            m = Message(account=account,
+                        folder=account.sent,
+                        subject=subject,
+                        body=HTMLBody(body),
+                        to_recipients=to_recipients,
+                        reply_to=reply_to_addresses)
+        else:
+            m = Message(account=account,
+                        folder=account.sent,
+                        subject=subject,
+                        body=HTMLBody(body),
+                        to_recipients=to_recipients,
+                        reply_to=reply_to_addresses,
+                        sender=sender)
 
         # attach files
         for attachment in attachments or []:
@@ -85,74 +209,10 @@ class MailProcessor:
         logging.info('Sending mail to {}'.format(to_recipients))
         m.send_and_save()
 
-    def send(self):
-        """
-        Sends an e-mail as "me" using the mail service and message body.
-        """
-        self._get_attachments()
-        recipient = self._config.mail_to_mapping.get(self._email.recipient)
-        self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
+    def _send_reply_email(self, template: str):
+        with open(template) as file_:
+            template = Template(file_.read())
+        body = template.render(email=self._email)
+        subject = 'Re: {}'.format(self._email.subject)
 
-    def _get_attachments(self):
-        """
-        Downloads attachments from a gcs bucket.
-        Filters and merges pdf attachments if applicable.
-        """
-
-        if self._config.pdf_only:
-            for idx, attachment in enumerate(self._email.attachments):
-                if not attachment.mimetype.endswith("pdf"):
-                    self._email.attachments.pop(idx)
-
-        for attachment in self._email.attachments:
-            attachment.content = self._read_gcs(
-                attachment.bucket,
-                attachment.full_path)
-
-            logging.info(f"Downloaded attachment {attachment.file_name}")
-
-        if self._email.attachments and self._config.merge_pdfs:
-            first_attachment = next(iter(self._email.attachments))
-            attachment_name = first_attachment.file_name
-            self._merge_pdfs(attachment_name)
-
-    def _merge_pdfs(self, attachment_name: str):
-        """
-        Merges pdf attachments to a single file.
-        """
-
-        attachments = self._email.attachments
-
-        self._email.attachments = [a for a in attachments if not a.mimetype.endswith("pdf")]
-
-        merger = PdfFileMerger(strict=False)
-        for attachment in attachments:
-            with io.BytesIO(attachment.content) as file:
-                merger.append(PdfFileReader(file, strict=False), import_bookmarks=False)
-
-        logging.info(f"Merged {len(attachments)} pdf attachments")
-
-        content = io.BytesIO()
-        merger.write(content)
-        merger.close()
-
-        pdf = Attachment(
-            mimetype='application/pdf',
-            bucket=None,
-            file_name=attachment_name,
-            full_path=None,
-            content=content.getvalue()
-        )
-
-        self._email.attachments = [pdf] + self._email.attachments
-
-    def _read_gcs(self, bucket_name: str, file_name: str):
-        """
-        Reads a file from google cloud storage.
-        """
-
-        bucket = self._gcs_client.get_bucket(bucket_name)
-        blob = bucket.get_blob(file_name)
-        content = blob.download_as_bytes()
-
-        return content
+        self._send_email(self._account, subject, body, [self._email.sender], [], ['no_reply@vwtelecom.com'])
