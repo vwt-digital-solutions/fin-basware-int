@@ -38,9 +38,12 @@ def handler(request):
         password=util.get_secret(os.environ['PROJECT_ID'], config.SECRET_ID),
         mail_from=config.EMAIL_ADDRESS,
         mail_to_mapping=config.EMAILS_SENDER_RECEIVER_MAPPING,
+        send_replies=config.SEND_REPLIES,
         pdf_only=config.PDF_ONLY,
         merge_pdfs=config.MERGE_PDF,
-    )
+        exchange_url=config.EXCHANGE_URL,
+        exchange_version=config.EXCHANGE_VERSION,
+        reply_to_email=config.REPLY_TO_EMAIL_ADDRESS)
 
     processor = MailProcessor(email, configuration)
 

@@ -1,12 +1,15 @@
 import io
 import logging
+import os
 import tempfile
-import config
+
+import util
 
 from typing import List, Optional
 from dataclasses import dataclass
 
-from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance, HTMLBody
+from exchangelib import FileAttachment, Message, Mailbox, Account, Credentials, Configuration, FaultTolerance, HTMLBody, \
+    Version, Build
 from google.cloud import storage
 
 from jinja2 import Template
@@ -43,6 +46,10 @@ class EWSConfig:
     mail_to_mapping: str
     pdf_only: bool
     merge_pdfs: bool
+    send_replies: bool
+    exchange_version: dict
+    exchange_url: str
+    reply_to_email: str
 
 
 class MailProcessor:
@@ -55,6 +62,16 @@ class MailProcessor:
         ews_config = Configuration(auth_type='basic', retry_policy=FaultTolerance(max_wait=300))
         self._account = Account(config.email_account, credentials=credentials, autodiscover=True, config=ews_config)
 
+        # Setup reply-mail client.
+        recipient = self._config.mail_to_mapping.get(self._email.recipient)
+        acc_credentials = Credentials(username=recipient['account'],
+                                      password=util.get_secret(os.environ['PROJECT_ID'], recipient['secret']))
+        version = Version(build=Build(config.exchange_version['major'], config.exchange_version['minor']))
+        acc_config = Configuration(service_endpoint=config.EXCHANGE_URL, credentials=acc_credentials,
+                                   auth_type='basic', version=version, retry_policy=FaultTolerance(max_wait=300))
+        self._reply_email_account = Account(primary_smtp_address=recipient['account'], config=acc_config,
+                                            autodiscover=False, access_type='delegate')
+
     def process(self):
         """
         Sends an e-mail as "me" using the mail service and message body.
@@ -62,10 +79,10 @@ class MailProcessor:
         pdf_count = self._load_attachments()
 
         if not pdf_count == 0:
-            recipient = self._config.mail_to_mapping.get(self._email.recipient)
+            recipient = self._config.mail_to_mapping.get(self._email.recipient)['basware_email']
             self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
 
-        if config.SEND_REPLIES:
+        if self._config.send_replies:
             if pdf_count == 0:
                 self._send_reply_email('templates/error.html')
             if pdf_count == 1:
@@ -157,7 +174,7 @@ class MailProcessor:
         return content
 
     def _send_email(self, account, subject, body, recipients,
-                    attachments: [Attachment] = None, reply_to: [str] = [], sender: str = None):
+                    attachments: [Attachment] = None, reply_to: [str] = []):
         """
         Send an email.
 
@@ -180,25 +197,15 @@ class MailProcessor:
             to_recipients.append(Mailbox(email_address=recipient))
 
         reply_to_addresses = []
-        for sender in reply_to:
-            reply_to_addresses.append(Mailbox(email_address=sender))
+        for address in reply_to:
+            reply_to_addresses.append(Mailbox(email_address=address))
 
-        if sender is None:
-            # Create message
-            m = Message(account=account,
-                        folder=account.sent,
-                        subject=subject,
-                        body=HTMLBody(body),
-                        to_recipients=to_recipients,
-                        reply_to=reply_to_addresses)
-        else:
-            m = Message(account=account,
-                        folder=account.sent,
-                        subject=subject,
-                        body=HTMLBody(body),
-                        to_recipients=to_recipients,
-                        reply_to=reply_to_addresses,
-                        sender=sender)
+        m = Message(account=account,
+                    folder=account.sent,
+                    subject=subject,
+                    body=HTMLBody(body),
+                    to_recipients=to_recipients,
+                    reply_to=reply_to)
 
         # attach files
         for attachment in attachments or []:
@@ -213,4 +220,5 @@ class MailProcessor:
         body = template.render(email=self._email)
         subject = 'Re: {}'.format(self._email.subject)
 
-        self._send_email(self._account, subject, body, [self._email.sender], [], ['no_reply@vwtelecom.com'])
+        self._send_email(account=self._reply_email_account, subject=subject, body=body, recipients=[self._email.sender],
+                         attachments=[], reply_to=[self._config.reply_to_email])
