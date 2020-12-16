@@ -122,8 +122,6 @@ class MailProcessor:
                 version = max(version, src_pdf.pdf_version)
                 merged_pdf.pages.extend(src_pdf.pages)
 
-        merged_pdf.remove_unreferenced_resources()
-
         merged_pdf_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
         merged_pdf.save(merged_pdf_file)
 
