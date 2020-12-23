@@ -82,13 +82,16 @@ class MailProcessor:
             recipient = self._config.mail_to_mapping.get(self._email.recipient)['basware_email']
             self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
 
-        if self._config.send_replies:
-            if pdf_count == 0:
-                self._send_reply_email('templates/error.html')
-            if pdf_count == 1:
-                self._send_reply_email('templates/success.html')
-            else:
-                self._send_reply_email('templates/warning.html')
+        try:
+            if self._config.send_replies:
+                if pdf_count == 0:
+                    self._send_reply_email('templates/error.html')
+                if pdf_count == 1:
+                    self._send_reply_email('templates/success.html')
+                else:
+                    self._send_reply_email('templates/warning.html')
+        except:  # noqa: E722
+            logging.error("Error sending email", exc_info=True)
 
     def _load_attachments(self):
         """
@@ -219,6 +222,10 @@ class MailProcessor:
             template = Template(file_.read())
         body = template.render(email=self._email)
         subject = 'Re: {}'.format(self._email.subject)
+
+        logging.info('Sending email {} to {} from mailbox {}'.format(subject,
+                                                                     self._email.sender,
+                                                                     self._email.recipient))
 
         self._send_email(account=self._reply_email_account, subject=subject, body=body, recipients=[self._email.sender],
                          attachments=[], reply_to=[self._config.reply_to_email])
