@@ -67,7 +67,7 @@ class MailProcessor:
         acc_credentials = Credentials(username=recipient['account'],
                                       password=util.get_secret(os.environ['PROJECT_ID'], recipient['secret']))
         version = Version(build=Build(config.exchange_version['major'], config.exchange_version['minor']))
-        acc_config = Configuration(service_endpoint=config.EXCHANGE_URL, credentials=acc_credentials,
+        acc_config = Configuration(service_endpoint=config.exchange_url, credentials=acc_credentials,
                                    auth_type='basic', version=version, retry_policy=FaultTolerance(max_wait=300))
         self._reply_email_account = Account(primary_smtp_address=recipient['account'], config=acc_config,
                                             autodiscover=False, access_type='delegate')
