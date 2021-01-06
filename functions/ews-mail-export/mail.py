@@ -17,6 +17,8 @@ from jinja2 import Template
 from PyPDF2 import PdfFileWriter, PdfFileReader
 from pikepdf import Pdf
 
+logging.getLogger("exchangelib").setLevel(logging.ERROR)
+
 
 @dataclass
 class Attachment:
