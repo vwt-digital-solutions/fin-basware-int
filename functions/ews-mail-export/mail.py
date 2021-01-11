@@ -225,6 +225,12 @@ class MailProcessor:
         body = template.render(email=self._email)
         subject = 'Re: {}'.format(self._email.subject)
 
+        if self._email.sender.lower() == self._email.recipient.lower():
+            logging.info('Skipped sending email {} to mailbox {}, identical sender and recipient'
+                         .format(subject,
+                                 self._email.sender))
+            return
+
         logging.info('Sending email {} to {} from mailbox {}'.format(subject,
                                                                      self._email.sender,
                                                                      self._email.recipient))
