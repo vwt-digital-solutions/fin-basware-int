@@ -52,6 +52,8 @@ class EWSConfig:
     exchange_version: dict
     exchange_url: str
     reply_to_email: str
+    ignore_reply_subjects: List[str]
+    ignore_reply_senders: List[str]
 
 
 class MailProcessor:
@@ -226,7 +228,17 @@ class MailProcessor:
         subject = 'Re: {}'.format(self._email.subject)
 
         if self._email.sender.lower() == self._email.recipient.lower():
-            logging.info('Skipped sending email {} to mailbox {}, identical sender and recipient'
+            logging.info('Skipped sending email {} to mailbox {}, identical sender and recipient.'
+                         .format(subject,
+                                 self._email.sender))
+            return
+        if self._email.sender.lower() in self._config.ignore_reply_senders:
+            logging.info('Skipped sending email {} from sender {}. Sender is on ignore list'
+                         .format(subject,
+                                 self._email.sender))
+            return
+        if len([x for x in self._config.ignore_reply_subjects if self._email.subject.startswith(x)]) > 0:
+            logging.info('Skipped sending email {} from sender {}. Subject is on ignore list.'
                          .format(subject,
                                  self._email.sender))
             return
