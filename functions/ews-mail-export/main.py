@@ -43,7 +43,9 @@ def handler(request):
         merge_pdfs=config.MERGE_PDF,
         exchange_url=config.EXCHANGE_URL,
         exchange_version=config.EXCHANGE_VERSION,
-        reply_to_email=config.REPLY_TO_EMAIL_ADDRESS)
+        reply_to_email=config.REPLY_TO_EMAIL_ADDRESS,
+        ignore_reply_subjects=config.IGNORE_REPLY_SUBJECTS,
+        ignore_reply_senders=config.IGNORE_REPLY_SENDERS)
 
     processor = MailProcessor(email, configuration)
 
