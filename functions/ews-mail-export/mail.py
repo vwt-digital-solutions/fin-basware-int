@@ -63,14 +63,16 @@ class MailProcessor:
         self._config = config
         self._gcs_client = storage.Client()
         credentials = Credentials(config.email_account, config.password)
-        ews_config = Configuration(auth_type='basic', retry_policy=FaultTolerance(max_wait=300))
-        self._account = Account(config.email_account, credentials=credentials, autodiscover=True, config=ews_config)
+        version = Version(build=Build(config.exchange_version['major'], config.exchange_version['minor']))
+        ews_config = Configuration(service_endpoint=config.exchange_url, credentials=credentials,
+                                   auth_type='basic', version=version, retry_policy=FaultTolerance(max_wait=300))
+        self._account = Account(primary_smtp_address=config.email_account, config=ews_config,
+                                autodiscover=False, access_type='delegate')
 
         # Setup reply-mail client.
         recipient = self._config.mail_to_mapping.get(self._email.recipient)
         acc_credentials = Credentials(username=recipient['account'],
                                       password=util.get_secret(os.environ['PROJECT_ID'], recipient['secret']))
-        version = Version(build=Build(config.exchange_version['major'], config.exchange_version['minor']))
         acc_config = Configuration(service_endpoint=config.exchange_url, credentials=acc_credentials,
                                    auth_type='basic', version=version, retry_policy=FaultTolerance(max_wait=300))
         self._reply_email_account = Account(primary_smtp_address=recipient['account'], config=acc_config,
