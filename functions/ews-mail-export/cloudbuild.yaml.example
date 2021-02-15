@@ -1,0 +1,20 @@
+---
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud functions deploy ${PROJECT_ID}-ews-mail-export-func \
+          --entry-point=handler \
+          --runtime=python37 \
+          --trigger-http \
+          --project=${PROJECT_ID} \
+          --region=europe-west1 \
+          --max-instances=1 \
+          --set-env-vars=PROJECT_ID=${PROJECT_ID} \
+          --timeout=540
+        gcloud beta functions set-iam-policy ${PROJECT_ID}-ews-mail-export-func \
+          --region=europe-west1 \
+          --project=${PROJECT_ID} ../../../config/${PROJECT_ID}/consume_func_permissions.json
+    dir: 'functions/ews-mail-export'

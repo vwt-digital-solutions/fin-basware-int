@@ -1,0 +1,32 @@
+EMAILS_SENDER_RECEIVER_MAPPING = {
+    'recipient_email_address': {
+        'recipient_email': 'recipient-email-address',
+        'sender_account': 'sender-email-account',
+        'sender_account_secret': 'sender-email-account-secret'
+    }
+}
+
+NEEDS_PDFS = False
+MERGE_PDF = False
+PDF_ONLY = False
+SEND_REPLIES = False
+
+EXCHANGE_URL = "exchange-url"
+EXCHANGE_VERSION = {
+    'major': 0,
+    'minor': 0
+}
+REPLY_TO_EMAIL_ADDRESS = 'reply-to-email-address'
+IGNORE_REPLY_SUBJECTS = [
+    "reply-subject-1",
+    "reply-subject-2",
+    "reply-subject-etcetera"
+]
+IGNORE_REPLY_SENDERS = [
+    "ignore-reply-sender-1",
+    "ignore-reply-sender-2",
+    "ignore-reply-sender-etcetera"
+]
+
+EMAIL_ADDRESS = 'email-address-from-which-to-send'
+SECRET_ID = 'email-address-password-secret-id'

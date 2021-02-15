@@ -39,6 +39,7 @@ def handler(request):
         mail_from=config.EMAIL_ADDRESS,
         mail_to_mapping=config.EMAILS_SENDER_RECEIVER_MAPPING,
         send_replies=config.SEND_REPLIES,
+        needs_pdfs=config.NEEDS_PDFS,
         pdf_only=config.PDF_ONLY,
         merge_pdfs=config.MERGE_PDF,
         exchange_url=config.EXCHANGE_URL,

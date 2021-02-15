@@ -18,6 +18,7 @@ from PyPDF2 import PdfFileWriter, PdfFileReader
 from pikepdf import Pdf
 
 logging.getLogger("exchangelib").setLevel(logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
@@ -46,6 +47,7 @@ class EWSConfig:
     password: str
     mail_from: str
     mail_to_mapping: str
+    needs_pdfs: bool
     pdf_only: bool
     merge_pdfs: bool
     send_replies: bool
@@ -71,11 +73,11 @@ class MailProcessor:
 
         # Setup reply-mail client.
         recipient = self._config.mail_to_mapping.get(self._email.recipient)
-        acc_credentials = Credentials(username=recipient['account'],
-                                      password=util.get_secret(os.environ['PROJECT_ID'], recipient['secret']))
+        acc_credentials = Credentials(username=recipient['sender_account'],
+                                      password=util.get_secret(os.environ['PROJECT_ID'], recipient['sender_account_secret']))
         acc_config = Configuration(service_endpoint=config.exchange_url, credentials=acc_credentials,
                                    auth_type='basic', version=version, retry_policy=FaultTolerance(max_wait=300))
-        self._reply_email_account = Account(primary_smtp_address=recipient['account'], config=acc_config,
+        self._reply_email_account = Account(primary_smtp_address=recipient['sender_account'], config=acc_config,
                                             autodiscover=False, access_type='delegate')
 
     def process(self):
@@ -84,8 +86,12 @@ class MailProcessor:
         """
         pdf_count = self._load_attachments()
 
-        if not pdf_count == 0:
-            recipient = self._config.mail_to_mapping.get(self._email.recipient)['basware_email']
+        if self._config.needs_pdfs:
+            if not pdf_count == 0:
+                recipient = self._config.mail_to_mapping.get(self._email.recipient)['recipient_email']
+                self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
+        else:
+            recipient = self._config.mail_to_mapping.get(self._email.recipient)['recipient_email']
             self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
 
         try:
