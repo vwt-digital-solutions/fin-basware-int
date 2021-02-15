@@ -12,6 +12,7 @@ steps:
           --project=${PROJECT_ID} \
           --region=europe-west1 \
           --max-instances=1 \
+          --set-env-vars=PROJECT_ID=${PROJECT_ID} \
           --timeout=540
         gcloud beta functions set-iam-policy ${PROJECT_ID}-ews-mail-export-func \
           --region=europe-west1 \

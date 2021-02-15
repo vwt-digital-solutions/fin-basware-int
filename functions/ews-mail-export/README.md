@@ -17,7 +17,11 @@ This function consumes messages containing e-mails posted on a Pub/Sub Topic and
     EMAIL_ADDRESS = The email address from which to send emails
     SECRET_ID = The secret ID of the password of this email address
     ~~~
-2. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
+2. Make sure the following variables are present in the environment:
+    ~~~
+    PROJECT_ID = The Google Cloud Platform project ID
+    ~~~
+3. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
 
 ### Sender Reciever Mapping
 The field ```EMAILS_SENDER_RECEIVER_MAPPING``` should look as follows:
