@@ -1,0 +1,10 @@
+{
+  "bindings": [
+    {
+      "members": [
+        "serviceAccount:gcp-service-account"
+      ],
+      "role": "gcp-role"
+    }
+  ]
+}
