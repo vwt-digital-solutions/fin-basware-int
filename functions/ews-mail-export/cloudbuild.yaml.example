@@ -6,7 +6,7 @@ steps:
       - '-c'
       - |
         gcloud functions deploy ${PROJECT_ID}-ews-mail-export-func \
-          --entry-point=json_to_link2 \
+          --entry-point=handler \
           --runtime=python37 \
           --trigger-http \
           --project=${PROJECT_ID} \
