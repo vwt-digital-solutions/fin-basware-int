@@ -103,7 +103,7 @@ class MailProcessor:
                 else:
                     self._send_reply_email('templates/warning.html')
         except:  # noqa: E722
-            logging.error("Error sending email", exc_info=True)
+            logging.warning("Error sending reply email", exc_info=True)
 
     def _load_attachments(self):
         """
