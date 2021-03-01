@@ -5,6 +5,7 @@ This function consumes messages containing e-mails posted on a Pub/Sub Topic and
 1. Make sure a ```config.py``` file exists within the directory, based on the [config.example.py](config.example.py), with the correct configuration:
     ~~~
     EMAILS_SENDER_RECEIVER_MAPPING = Dictionary mapping about where the email should be send to and where it should come from
+    HARDCODED_RECIPIENTS = Boolean whether the function can only send mails to certain recipients
     NEEDS_PDFS = Boolean whether the send email needs PDFs or not
     MERGE_PDF = Boolean whether the PDFs send along with the email should be merged or not
     PDF_ONLY = Boolean whether there are only PDFs or not
@@ -24,11 +25,21 @@ This function consumes messages containing e-mails posted on a Pub/Sub Topic and
 3. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
 
 ### Sender Reciever Mapping
-The field ```EMAILS_SENDER_RECEIVER_MAPPING``` should look as follows:
+The field ```EMAILS_SENDER_RECEIVER_MAPPING``` should look as follows:  
+If the boolean ```HARDCODED_RECIPIENTS``` is True:  
 ~~~JSON
 {
     "recipient_email_address": {
         "recipient_email": "recipient-email-address",
+        "sender_account": "sender-email-account",
+        "sender_account_secret": "sender-email-account-secret"
+    }
+}
+~~~
+If the boolean ```HARDCODED_RECIPIENTS``` is False:  
+~~~JSON
+{
+    "STANDARD": {
         "sender_account": "sender-email-account",
         "sender_account_secret": "sender-email-account-secret"
     }

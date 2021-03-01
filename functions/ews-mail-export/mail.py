@@ -47,6 +47,7 @@ class EWSConfig:
     password: str
     mail_from: str
     mail_to_mapping: str
+    hardcoded_recipients: bool
     needs_pdfs: bool
     pdf_only: bool
     merge_pdfs: bool
@@ -72,7 +73,12 @@ class MailProcessor:
                                 autodiscover=False, access_type='delegate')
 
         # Setup reply-mail client.
-        recipient = self._config.mail_to_mapping.get(self._email.recipient)
+
+        recipient = ""
+        if self._config.hardcoded_recipients:
+            recipient = self._config.mail_to_mapping.get(self._email.recipient)
+        else:
+            recipient = self._config.mail_to_mapping.get("STANDARD")
         acc_credentials = Credentials(username=recipient['sender_account'],
                                       password=util.get_secret(os.environ['PROJECT_ID'], recipient['sender_account_secret']))
         acc_config = Configuration(service_endpoint=config.exchange_url, credentials=acc_credentials,
@@ -86,12 +92,24 @@ class MailProcessor:
         """
         pdf_count = self._load_attachments()
 
-        if self._config.needs_pdfs:
-            if not pdf_count == 0:
-                recipient = self._config.mail_to_mapping.get(self._email.recipient)['recipient_email']
-                self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
+        # Get recipient based on recipient config
+        recipient = self._config.mail_to_mapping.get(self._email.recipient)
+        # If no recipient can be found
+        if not recipient:
+            # Check if STANDARD recipient is found
+            recipient = self._config.mail_to_mapping.get("STANDARD")
+            if not recipient:
+                logging.error("Recipient could not be found in config")
+                return False
+            else:
+                recipient = self._email.recipient
         else:
             recipient = self._config.mail_to_mapping.get(self._email.recipient)['recipient_email']
+
+        if self._config.needs_pdfs:
+            if not pdf_count == 0:
+                self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
+        else:
             self._send_email(self._account, self._email.subject, self._email.body, [recipient], self._email.attachments)
 
         try:
@@ -104,6 +122,7 @@ class MailProcessor:
                     self._send_reply_email('templates/warning.html')
         except:  # noqa: E722
             logging.warning("Error sending reply email", exc_info=True)
+        return True
 
     def _load_attachments(self):
         """
