@@ -19,7 +19,6 @@ def handler(request):
 
     try:
         envelope = json.loads(request.data.decode('utf-8'))
-        logging.info(envelope)
         bytes = base64.b64decode(envelope['message']['data'])
         message = json.loads(bytes)
     except Exception as e:
@@ -38,6 +37,7 @@ def handler(request):
         password=util.get_secret(os.environ['PROJECT_ID'], config.SECRET_ID),
         mail_from=config.EMAIL_ADDRESS,
         mail_to_mapping=config.EMAILS_SENDER_RECEIVER_MAPPING,
+        hardcoded_recipients=config.HARDCODED_RECIPIENTS,
         send_replies=config.SEND_REPLIES,
         needs_pdfs=config.NEEDS_PDFS,
         pdf_only=config.PDF_ONLY,
@@ -50,7 +50,9 @@ def handler(request):
 
     processor = MailProcessor(email, configuration)
 
-    processor.process()
+    process_bool = processor.process()
+    if not process_bool:
+        logging.error("Mail was not send")
 
 
 if __name__ == '__main__':
