@@ -174,7 +174,7 @@ class MailProcessor:
                 merged_pdf.pages.extend(src_pdf.pages)
 
         merged_pdf_file = tempfile.NamedTemporaryFile(mode='w+b', delete=False)
-        merged_pdf.save(merged_pdf_file)
+        merged_pdf.save(merged_pdf_file, compress_streams=False)
 
         # Use PyPDF2 to clean the pdf from any links and Javascript.
         writer = PdfFileWriter()
