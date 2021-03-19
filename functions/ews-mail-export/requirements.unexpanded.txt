@@ -1,8 +1,8 @@
 dacite==1.5.1
 exchangelib==3.3.2
 jinja2==2.11.2
-pikepdf==2.2.1
 Pillow==8.1.2
+pikepdf==2.8.0
 PyPDF2==1.26.0
 google-api-core==1.23.0
 google-cloud-core==1.4.3
