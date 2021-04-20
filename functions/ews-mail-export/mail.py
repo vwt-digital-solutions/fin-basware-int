@@ -132,7 +132,7 @@ class MailProcessor:
             ]
 
         if self._config.needs_pdfs:
-            if not pdf_count == 0:
+            if pdf_count > 0:
                 self._send_email(
                     self._account,
                     self._email.subject,
@@ -153,7 +153,7 @@ class MailProcessor:
             if self._config.send_replies:
                 if pdf_count == 0:
                     self._send_reply_email("templates/error.html")
-                if pdf_count == 1:
+                elif pdf_count == 1:
                     self._send_reply_email("templates/success.html")
                 else:
                     self._send_reply_email("templates/warning.html")
