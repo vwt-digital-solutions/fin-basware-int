@@ -18,11 +18,12 @@ This function consumes messages containing e-mails posted on a Pub/Sub Topic and
     EMAIL_ADDRESS = The email address from which to send emails
     SECRET_ID = The secret ID of the password of this email address
     ~~~
-2. Make sure the following variables are present in the environment:
+2. Make sure there is a [templates](templates) folder if you set ```SEND_REPLIES``` to True.
+3. Make sure the following variables are present in the environment:
     ~~~
     PROJECT_ID = The Google Cloud Platform project ID
     ~~~
-3. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
+4. Deploy the function with help of the [cloudbuild.example.yaml](cloudbuild.example.yaml) to the Google Cloud Platform.
 
 ### Sender Reciever Mapping
 The field ```EMAILS_SENDER_RECEIVER_MAPPING``` should look as follows:  
@@ -63,6 +64,15 @@ To make sure the function works according to the way it was intented, the incomi
 }
 ~~~
 
+Where attachments is a list containing of objects that look as follows:
+~~~JSON
+{
+    "mimetype": "",
+    "bucket": "",
+    "file_name": "",
+    "full_path": ""
+}
+~~~
 
 ## License
 This function is licensed under the [GPL-3](https://www.gnu.org/licenses/gpl-3.0.en.html) License
