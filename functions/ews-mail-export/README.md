@@ -18,7 +18,7 @@ This function consumes messages containing e-mails posted on a Pub/Sub Topic and
     EMAIL_ADDRESS = The email address from which to send emails
     SECRET_ID = The secret ID of the password of this email address
     ~~~
-2. Make sure there is a [templates](templates) folder if you set ```SEND_REPLIES``` to True.
+2. Make sure there is a [templates](templates-examples) folder if you set ```SEND_REPLIES``` to True.
 3. Make sure the following variables are present in the environment:
     ~~~
     PROJECT_ID = The Google Cloud Platform project ID
