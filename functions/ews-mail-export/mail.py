@@ -1,7 +1,6 @@
 import io
 import logging
 import os
-import tempfile
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -13,7 +12,6 @@ from exchangelib import (Account, Build, Configuration, Credentials,
                          FaultTolerance, FileAttachment, HTMLBody, Mailbox,
                          Message, Version)
 from pikepdf import Pdf
-from PyPDF2 import PdfFileReader, PdfFileWriter
 
 logging.getLogger("exchangelib").setLevel(logging.ERROR)
 logging.basicConfig(level=logging.INFO)
@@ -188,11 +186,7 @@ class MailProcessor:
 
     def _merge_pdfs(self, attachment_name: str):
         """
-        Merges pdf attachments to a single file.
-        This function uses both pikePDF (For merging), and pyPDF2 (for cleaning).
-        An initial implementation used only pyPDF2, but that proved to problematic since pyPDF
-        has quite a lot of trouble merging different types of PDFs. Since pikePDF doesn't feature sanitizing pdfs,
-        we run it through pikepdf afterwards.
+        Merges and sanitises pdf attachments to a single file.
         """
 
         attachments = self._email.attachments
@@ -210,27 +204,22 @@ class MailProcessor:
                 version = max(version, src_pdf.pdf_version)
                 merged_pdf.pages.extend(src_pdf.pages)
 
-        merged_pdf_file = tempfile.NamedTemporaryFile(mode="w+b", delete=False)
-        merged_pdf.save(merged_pdf_file, compress_streams=False)
+        # Sanitising PDF by: removing URIs, burning forms into PDF (aka making print ready ), etc.
+        merged_pdf.flatten_annotations()
 
-        # Use PyPDF2 to clean the pdf from any links and Javascript.
-        writer = PdfFileWriter()
-        reader = PdfFileReader(merged_pdf_file, strict=False)
-        [writer.addPage(reader.getPage(i)) for i in range(0, reader.getNumPages())]
-        writer.removeLinks()
-        with tempfile.NamedTemporaryFile(
-            mode="w+b", delete=False
-        ) as merged_and_cleaned_pdf_file:
-            writer.write(merged_and_cleaned_pdf_file)
-            merged_and_cleaned_pdf_file.seek(0)
-            merged_and_cleaned_pdf_content = merged_and_cleaned_pdf_file.read()
+        # Save sanitized PDF to stream, then read the bytes of this stream to set as content.
+        merged_pdf_stream = io.BytesIO()
+        merged_pdf.save(merged_pdf_stream)
+
+        merged_pdf_stream.seek(0)
+        merged_pdf_content = merged_pdf_stream.read()
 
         pdf = Attachment(
             mimetype="application/pdf",
             bucket=None,
             file_name=attachment_name,
             full_path=None,
-            content=merged_and_cleaned_pdf_content,
+            content=merged_pdf_content,
         )
 
         self._email.attachments = [pdf] + self._email.attachments
@@ -247,13 +236,13 @@ class MailProcessor:
         return content
 
     def _send_email(
-        self,
-        account,
-        subject,
-        body,
-        recipients,
-        attachments: [Attachment] = None,
-        reply_to: [str] = [],
+            self,
+            account,
+            subject,
+            body,
+            recipients,
+            attachments: [Attachment] = None,
+            reply_to: [str] = [],
     ):
         """
         Send an email.
@@ -317,14 +306,14 @@ class MailProcessor:
             )
             return
         if (
-            len(
-                [
-                    x
-                    for x in self._config.ignore_reply_subjects
-                    if self._email.subject.startswith(x)
-                ]
-            )
-            > 0
+                len(
+                    [
+                        x
+                        for x in self._config.ignore_reply_subjects
+                        if self._email.subject.startswith(x)
+                    ]
+                )
+                > 0
         ):
             logging.info(
                 "Skipped sending email {} from sender {}. Subject is on ignore list.".format(
