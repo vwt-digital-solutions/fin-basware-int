@@ -199,16 +199,8 @@ class MailProcessor:
         version = merged_pdf.pdf_version
 
         for attachment in attachments:
-            with attachment.content as file:
-                # File is some sort of EWS attachment.fp object that needs to be buffered.
-                # TODO: Prebuffer this before passing it along, please.
-                pdf_byte_stream = io.BytesIO()
-                buffer = file.read(1024)
-                while buffer:
-                    pdf_byte_stream.write(buffer)
-                    buffer = file.read(1024)
-
-                src_pdf = Pdf.open(pdf_byte_stream)
+            with io.BytesIO(attachment.content) as file:
+                src_pdf = Pdf.open(file)
                 version = max(version, src_pdf.pdf_version)
                 merged_pdf.pages.extend(src_pdf.pages)
 
