@@ -199,7 +199,7 @@ class MailProcessor:
         version = merged_pdf.pdf_version
 
         for attachment in attachments:
-            with io.BytesIO(attachment.content) as file:
+            with attachment.content as file:
                 # File is some sort of EWS attachment.fp object that needs to be buffered.
                 # TODO: Prebuffer this before passing it along, please.
                 pdf_byte_stream = io.BytesIO()
