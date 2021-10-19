@@ -4,7 +4,6 @@ import os
 from dataclasses import dataclass
 from typing import List, Optional
 
-import pikepdf
 from google.cloud import storage
 from jinja2 import Template
 
@@ -12,7 +11,7 @@ import util
 from exchangelib import (Account, Build, Configuration, Credentials,
                          FaultTolerance, FileAttachment, HTMLBody, Mailbox,
                          Message, Version)
-from pikepdf import Pdf, PdfError, Name, Operator, String, Page
+from pikepdf import Pdf
 
 logging.getLogger("exchangelib").setLevel(logging.ERROR)
 logging.basicConfig(level=logging.INFO)
@@ -201,28 +200,9 @@ class MailProcessor:
 
         for attachment in attachments:
             with io.BytesIO(attachment.content) as file:
-                try:
-                    src_pdf = Pdf.open(file)
-                    version = max(version, src_pdf.pdf_version)
-                    merged_pdf.pages.extend(src_pdf.pages)
-                except PdfError as error:
-                    logging.error(f"Could not open PDF: {str(error)}")
-
-                    # When something went wrong we do not want the function to crash, but we have to
-                    # inform the user. For now we will append a page with a warning.
-                    new_page = merged_pdf.add_blank_page()
-                    new_page = Page(new_page)
-
-                    instructions = self._text_to_pdf_draw_instructions(
-                        "Something went wrong whilst processing this part of the PDF!\n"
-                        "Please contact support.",
-                        x=70,
-                        y=720
-                    )
-
-                    instruction_stream = merged_pdf.make_stream(instructions)
-                    new_page.contents_add(instruction_stream)
-                    continue
+                src_pdf = Pdf.open(file)
+                version = max(version, src_pdf.pdf_version)
+                merged_pdf.pages.extend(src_pdf.pages)
 
         # Sanitising PDF by: removing URIs, burning forms into PDF (aka making print ready ), etc.
         merged_pdf.flatten_annotations()
@@ -243,29 +223,6 @@ class MailProcessor:
         )
 
         self._email.attachments = [pdf] + self._email.attachments
-
-    @staticmethod
-    def _text_to_pdf_draw_instructions(text: str, x: float, y: float, font_size: int = 10, text_spacing: float = 12):
-        """
-        This function creates PDF 1.7 instructions that add text to a PDF.
-
-        :return: An array of bytes containing the instructions.
-        :rtype: bytearray
-        """
-
-        lines = text.split('\n')
-        instructions = []
-        for line in lines:
-            instructions.extend([
-                ([], Operator("BT")),  # Starting text block.
-                ([Name("/F1"), font_size], Operator("Tf")),  # Setting text font.
-                ([x, y], Operator("Td")),  # Setting text position.
-                ([String(line)], Operator("Tj")),  # Setting text data.
-                ([], Operator("ET"))  # Ending text block.
-            ])
-            y -= text_spacing
-
-        return pikepdf.unparse_content_stream(instructions)
 
     def _read_gcs(self, bucket_name: str, file_name: str):
         """
