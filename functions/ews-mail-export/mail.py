@@ -11,7 +11,7 @@ import util
 from exchangelib import (Account, Build, Configuration, Credentials,
                          FaultTolerance, FileAttachment, HTMLBody, Mailbox,
                          Message, Version)
-from pikepdf import Pdf
+from pikepdf import Pdf, PdfError
 
 logging.getLogger("exchangelib").setLevel(logging.ERROR)
 logging.basicConfig(level=logging.INFO)
@@ -200,9 +200,13 @@ class MailProcessor:
 
         for attachment in attachments:
             with io.BytesIO(attachment.content) as file:
-                src_pdf = Pdf.open(file)
-                version = max(version, src_pdf.pdf_version)
-                merged_pdf.pages.extend(src_pdf.pages)
+                try:
+                    src_pdf = Pdf.open(file)
+                    version = max(version, src_pdf.pdf_version)
+                    merged_pdf.pages.extend(src_pdf.pages)
+                except PdfError as error:
+                    logging.error(f"Could not open PDF: {str(error)}")
+                    continue
 
         # Sanitising PDF by: removing URIs, burning forms into PDF (aka making print ready ), etc.
         merged_pdf.flatten_annotations()
