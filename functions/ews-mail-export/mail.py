@@ -194,32 +194,29 @@ class MailProcessor:
             a for a in attachments if not a.mimetype.endswith("pdf")
         ]
 
-        # Go through all attachments and merge them using pikePDF
-        merged_pdf = Pdf.new()
-        version = merged_pdf.pdf_version
+        output_stream = io.BytesIO()
+        with Pdf.new() as merged_pdf:
+            # Merging all PDF attachments to one PDF.
+            for attachment in attachments:
+                input_stream = io.BytesIO(attachment.content)
+                with input_stream as ips, Pdf.open(ips) as attachment_pdf:
+                    merged_pdf.pages.extend(attachment_pdf.pages)
 
-        for attachment in attachments:
-            with io.BytesIO(attachment.content) as file:
-                src_pdf = Pdf.open(file)
-                version = max(version, src_pdf.pdf_version)
-                merged_pdf.pages.extend(src_pdf.pages)
+            merged_pdf.flatten_annotations()  # Cleaning PDF (removing URI's, burning in filled in forms, etc.)
 
-        # Sanitising PDF by: removing URIs, burning forms into PDF (aka making print ready ), etc.
-        merged_pdf.flatten_annotations()
+            merged_pdf.save(output_stream)
+            output_stream.flush()
+            output_stream.seek(0)
 
-        # Save sanitized PDF to stream, then read the bytes of this stream to set as content.
-        merged_pdf_stream = io.BytesIO()
-        merged_pdf.save(merged_pdf_stream)
-
-        merged_pdf_stream.seek(0)
-        merged_pdf_content = merged_pdf_stream.read()
+        merged_pdf_bytes = output_stream.read()
+        output_stream.close()
 
         pdf = Attachment(
             mimetype="application/pdf",
             bucket=None,
             file_name=attachment_name,
             full_path=None,
-            content=merged_pdf_content,
+            content=merged_pdf_bytes,
         )
 
         self._email.attachments = [pdf] + self._email.attachments
