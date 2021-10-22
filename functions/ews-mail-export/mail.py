@@ -1,7 +1,6 @@
 import io
 import logging
 import os
-import tempfile
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -13,7 +12,6 @@ from exchangelib import (Account, Build, Configuration, Credentials,
                          FaultTolerance, FileAttachment, HTMLBody, Mailbox,
                          Message, Version)
 from pikepdf import Pdf
-from PyPDF2 import PdfFileReader, PdfFileWriter
 
 logging.getLogger("exchangelib").setLevel(logging.ERROR)
 logging.basicConfig(level=logging.INFO)
@@ -188,11 +186,7 @@ class MailProcessor:
 
     def _merge_pdfs(self, attachment_name: str):
         """
-        Merges pdf attachments to a single file.
-        This function uses both pikePDF (For merging), and pyPDF2 (for cleaning).
-        An initial implementation used only pyPDF2, but that proved to problematic since pyPDF
-        has quite a lot of trouble merging different types of PDFs. Since pikePDF doesn't feature sanitizing pdfs,
-        we run it through pikepdf afterwards.
+        Merges and sanitises pdf attachments to a single file.
         """
 
         attachments = self._email.attachments
@@ -200,37 +194,29 @@ class MailProcessor:
             a for a in attachments if not a.mimetype.endswith("pdf")
         ]
 
-        # Go through all attachments and merge them using pikePDF
-        merged_pdf = Pdf.new()
-        version = merged_pdf.pdf_version
+        output_stream = io.BytesIO()
+        with Pdf.new() as merged_pdf:
+            # Merging all PDF attachments to one PDF.
+            for attachment in attachments:
+                input_stream = io.BytesIO(attachment.content)
+                with input_stream as ips, Pdf.open(ips) as attachment_pdf:
+                    merged_pdf.pages.extend(attachment_pdf.pages)
 
-        for attachment in attachments:
-            with io.BytesIO(attachment.content) as file:
-                src_pdf = Pdf.open(file)
-                version = max(version, src_pdf.pdf_version)
-                merged_pdf.pages.extend(src_pdf.pages)
+            merged_pdf.flatten_annotations()  # Cleaning PDF (removing URI's, burning in filled in forms, etc.)
 
-        merged_pdf_file = tempfile.NamedTemporaryFile(mode="w+b", delete=False)
-        merged_pdf.save(merged_pdf_file, compress_streams=False)
+            merged_pdf.save(output_stream)
+            output_stream.flush()
+            output_stream.seek(0)
 
-        # Use PyPDF2 to clean the pdf from any links and Javascript.
-        writer = PdfFileWriter()
-        reader = PdfFileReader(merged_pdf_file, strict=False)
-        [writer.addPage(reader.getPage(i)) for i in range(0, reader.getNumPages())]
-        writer.removeLinks()
-        with tempfile.NamedTemporaryFile(
-            mode="w+b", delete=False
-        ) as merged_and_cleaned_pdf_file:
-            writer.write(merged_and_cleaned_pdf_file)
-            merged_and_cleaned_pdf_file.seek(0)
-            merged_and_cleaned_pdf_content = merged_and_cleaned_pdf_file.read()
+        merged_pdf_bytes = output_stream.read()
+        output_stream.close()
 
         pdf = Attachment(
             mimetype="application/pdf",
             bucket=None,
             file_name=attachment_name,
             full_path=None,
-            content=merged_and_cleaned_pdf_content,
+            content=merged_pdf_bytes,
         )
 
         self._email.attachments = [pdf] + self._email.attachments
@@ -247,13 +233,13 @@ class MailProcessor:
         return content
 
     def _send_email(
-        self,
-        account,
-        subject,
-        body,
-        recipients,
-        attachments: [Attachment] = None,
-        reply_to: [str] = [],
+            self,
+            account,
+            subject,
+            body,
+            recipients,
+            attachments: [Attachment] = None,
+            reply_to: [str] = [],
     ):
         """
         Send an email.
@@ -317,14 +303,14 @@ class MailProcessor:
             )
             return
         if (
-            len(
-                [
-                    x
-                    for x in self._config.ignore_reply_subjects
-                    if self._email.subject.startswith(x)
-                ]
-            )
-            > 0
+                len(
+                    [
+                        x
+                        for x in self._config.ignore_reply_subjects
+                        if self._email.subject.startswith(x)
+                    ]
+                )
+                > 0
         ):
             logging.info(
                 "Skipped sending email {} from sender {}. Subject is on ignore list.".format(
