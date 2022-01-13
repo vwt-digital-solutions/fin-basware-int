@@ -31,7 +31,7 @@ ntlm-auth==1.5.0
 oauthlib==3.1.1
 packaging==20.9
 pikepdf==2.16.1
-Pillow==8.2.0
+Pillow==9.0.0
 proto-plus==1.18.1
 protobuf==3.17.3
 pyasn1==0.4.8
