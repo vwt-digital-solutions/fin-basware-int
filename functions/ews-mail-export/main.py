@@ -35,6 +35,9 @@ def handler(request):
     configuration = EWSConfig(
         email_account=config.EMAIL_ADDRESS,
         password=util.get_secret(os.environ['PROJECT_ID'], config.SECRET_ID),
+        client_id=config.CLIENT_ID,
+        client_secret=util.get_secret(os.environ['PROJECT_ID'], config.CLIENT_SECRET_ID),
+        tenant_id=config.TENANT_ID,
         mail_from=config.EMAIL_ADDRESS,
         mail_to_mapping=config.EMAILS_SENDER_RECEIVER_MAPPING,
         hardcoded_recipients=config.HARDCODED_RECIPIENTS,

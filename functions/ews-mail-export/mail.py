@@ -10,7 +10,7 @@ from jinja2 import Template
 import util
 from exchangelib import (Account, Build, Configuration, Credentials,
                          FaultTolerance, FileAttachment, HTMLBody, Mailbox,
-                         Message, Version)
+                         Message, Version, OAuth2Credentials, OAUTH2, BASIC)
 from pikepdf import Pdf
 
 logging.getLogger("exchangelib").setLevel(logging.ERROR)
@@ -41,6 +41,9 @@ class Email:
 class EWSConfig:
     email_account: str
     password: str
+    client_id: str
+    client_secret: str
+    tenant_id: str
     mail_from: str
     mail_to_mapping: str
     hardcoded_recipients: bool
@@ -60,7 +63,13 @@ class MailProcessor:
         self._email = email
         self._config = config
         self._gcs_client = storage.Client()
-        credentials = Credentials(config.email_account, config.password)
+
+        if config.client_id is not None:
+            credentials = OAuth2Credentials(config.client_id, config.client_secret, config.tenant_id)
+        else:
+            credentials = Credentials(config.email_account, config.password)
+        credentials_type = OAUTH2 if config.client_id is not None else BASIC
+
         version = Version(
             build=Build(
                 config.exchange_version["major"], config.exchange_version["minor"]
@@ -69,7 +78,7 @@ class MailProcessor:
         ews_config = Configuration(
             service_endpoint=config.exchange_url,
             credentials=credentials,
-            auth_type="basic",
+            auth_type=credentials_type,
             version=version,
             retry_policy=FaultTolerance(max_wait=300),
         )
@@ -96,7 +105,7 @@ class MailProcessor:
         acc_config = Configuration(
             service_endpoint=config.exchange_url,
             credentials=acc_credentials,
-            auth_type="basic",
+            auth_type=credentials_type,
             version=version,
             retry_policy=FaultTolerance(max_wait=300),
         )

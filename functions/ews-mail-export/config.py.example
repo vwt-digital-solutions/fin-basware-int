@@ -31,3 +31,7 @@ IGNORE_REPLY_SENDERS = [
 
 EMAIL_ADDRESS = 'email-address-from-which-to-send'
 SECRET_ID = 'email-address-password-secret-id'
+
+# CLIENT_ID = '<client id>'
+CLIENT_SECRET_ID = 'email-address-client-secret-id'
+TENANT_ID = '<tenant id>'
