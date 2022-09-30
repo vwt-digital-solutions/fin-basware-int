@@ -10,12 +10,10 @@ from jinja2 import Template
 import util
 from exchangelib import (Account, Build, Configuration, Credentials,
                          FaultTolerance, FileAttachment, HTMLBody, Mailbox,
-                         Message, Version, OAuth2Credentials, OAUTH2, BASIC)
+                         Message, Version, OAuth2Credentials, OAUTH2, BASIC, IMPERSONATION)
 from pikepdf import Pdf
 
-logging.getLogger("exchangelib").setLevel(logging.ERROR)
-logging.basicConfig(level=logging.INFO)
-
+logging.getLogger("exchangelib").setLevel(logging.WARN)
 
 @dataclass
 class Attachment:
@@ -85,8 +83,8 @@ class MailProcessor:
         self._account = Account(
             primary_smtp_address=config.email_account,
             config=ews_config,
-            autodiscover=False,
-            access_type="delegate",
+            credentials=credentials,
+            access_type=IMPERSONATION,
         )
 
         # Setup reply-mail client.
@@ -96,24 +94,12 @@ class MailProcessor:
             recipient = self._config.mail_to_mapping.get(self._email.recipient)
         else:
             recipient = self._config.mail_to_mapping.get("STANDARD")
-        acc_credentials = Credentials(
-            username=recipient["sender_account"],
-            password=util.get_secret(
-                os.environ["PROJECT_ID"], recipient["sender_account_secret"]
-            ),
-        )
-        acc_config = Configuration(
-            service_endpoint=config.exchange_url,
-            credentials=acc_credentials,
-            auth_type=credentials_type,
-            version=version,
-            retry_policy=FaultTolerance(max_wait=300),
-        )
+
         self._reply_email_account = Account(
             primary_smtp_address=recipient["sender_account"],
-            config=acc_config,
-            autodiscover=False,
-            access_type="delegate",
+            config=ews_config,
+            credentials=credentials,
+            access_type=IMPERSONATION,
         )
 
     def process(self):
